@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Blink Maze</title>
+  <style>
+    body {
+      margin: 0;
+      background: black;
+      color: white;
+      font-family: sans-serif;
+      text-align: center;
+    }
+    #gameCanvas {
+      background: #111;
+      display: block;
+      margin: 20px auto;
+      border: 3px solid white;
+    }
+    #status {
+      font-size: 18px;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h1>✨ Blink Maze ✨</h1>
+  <canvas id="gameCanvas" width="600" height="400"></canvas>
+  <div id="status">Use arrow keys/WASD to move. Reach the glowing exit!</div>
+
+  <script>
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+    const status = document.getElementById("status");
+
+    const tileSize = Math.floor(Math.min(canvas.width/cols, canvas.height/rows));
+    const rows = canvas.height / tileSize;
+    const cols = canvas.width / tileSize;
+
+    let maze = [];
+    let player = {x: 1, y: 1, glowing: false};
+    let exit = {x: cols - 2, y: rows - 2};
+    let glowFruit = null;
+    let visible = true;
+
+    let level = 1;
+    const maxLevels = 10;
+    let startTime = Date.now();
+    let bestTimes = JSON.parse(localStorage.getItem("blinkMazeBest") || "{}");
+    let invisibleDuration = 2000;
+
+    function shuffle(arr) {
+      for(let i = arr.length - 1; i>0; i--){
+        let j=Math.floor(Math.random()*(i+1));
+        [arr[i],arr[j]]=[arr[j],arr[i]];
+      }
+      return arr;
+    }
+
+    function generateMaze() {
+      rows = Math.floor(15 + level*0.5);
+      cols = Math.floor(15 + level*0.5);
+      maze = Array.from({length: rows}, () => Array(cols).fill(1));
+
+      function shuffle(arr) {
+        for (let i = arr.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [arr[i], arr[j]] = [arr[j], arr[i]];
+        }
+        return arr;
+      }
+
+      function carve(x, y) {
+        maze[y][x] = 0;
+        const dirs = shuffle([[1,0],[-1,0],[0,1],[0,-1]]);
+        for (const [dx, dy] of dirs) {
+          const nx = x + dx * 2;
+          const ny = y + dy * 2;
+          if (nx > 0 && ny > 0 && nx < cols-1 && ny < rows-1 && maze[ny][nx] === 1) {
+            maze[y + dy][x + dx] = 0;
+            carve(nx, ny);
+          }
+        }
+      }
+
+      carve(1,1);
+      maze[exit.y][exit.x] = 0;
+    }
+
+    // --- Drawing ---
+    function drawMaze() {
+      if (!visible) return;
+      for (let y = 0; y < rows; y++) {
+        for (let x = 0; x < cols; x++) {
+          if (maze[y][x] === 1) {
+            ctx.fillStyle = "#444";
+            ctx.fillRect(x * tileSize, y * tileSize, tileSize, tileSize);
+          }
+        }
+      }
+    }
+
+    function drawPlayer() {
+      ctx.fillStyle = "cyan";
+      ctx.fillRect(player.x * tileSize + 8, player.y * tileSize + 8, tileSize - 16, tileSize - 16);
+    }
+
+    function drawExit() {
+      ctx.fillStyle = "lime";
+      ctx.fillRect(exit.x * tileSize + 4, exit.y * tileSize + 4, tileSize - 8, tileSize - 8);
+    }
+
+    function drawHUD() {
+      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+      const best = bestTimes["L"+level] ? bestTimes["L"+level].toFixed(1) + "s" : "--";
+      ctx.fillStyle = "white";
+      ctx.font = "16px monospace";
+      ctx.fillText(`Level ${level}/${maxLevels} | Time: ${elapsed}s | Best: ${best}`, 10, 20);
+    }
+
+    // --- Player + Collision ---
+    function resetPlayer(msg) {
+      player = {x: 1, y: 1};
+      status.textContent = msg;
+    }
+
+    function movePlayer(dx, dy) {
+      const nx = player.x + dx;
+      const ny = player.y + dy;
+      if (nx < 0 || ny < 0 || nx >= cols || ny >= rows) return;
+
+      if (maze[ny][nx] === 1) {
+        resetPlayer(`💀 You hit a wall! Back to start of Level ${level}.`);
+        return;
+      }
+
+      player.x = nx;
+      player.y = ny;
+
+      if (player.x === exit.x && player.y === exit.y) {
+        const elapsed = (Date.now() - startTime) / 1000;
+        if (!bestTimes["L"+level] || elapsed < bestTimes["L"+level]) {
+          bestTimes["L"+level] = elapsed;
+          localStorage.setItem("blinkMazeBest", JSON.stringify(bestTimes));
+          status.textContent = `⭐ New Best! Level ${level} in ${elapsed.toFixed(1)}s`;
+        } else {
+          status.textContent = `🎉 Level ${level} cleared in ${elapsed.toFixed(1)}s`;
+        }
+
+        if (level < maxLevels) {
+          level++;
+          player = {x: 1, y: 1};
+          exit = {x: cols - 2, y: rows - 2};
+          generateMaze();
+          startTime = Date.now();
+        } else {
+          status.textContent += ` 🏆 You conquered all 10 levels!`;
+        }
+      }
+    }
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "ArrowUp" || e.key === "w") movePlayer(0, -1);
+      if (e.key === "ArrowDown" || e.key === "s") movePlayer(0, 1);
+      if (e.key === "ArrowLeft" || e.key === "a") movePlayer(-1, 0);
+      if (e.key === "ArrowRight" || e.key === "d") movePlayer(1, 0);
+    });
+
+    // --- Game Loop ---
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      drawMaze();
+      drawExit();
+      drawPlayer();
+      drawHUD();
+    }
+
+    function loop() {
+      draw();
+      requestAnimationFrame(loop);
+    }
+
+    function toggleVisibility() {
+      visible = true;
+      setTimeout(() => { visible = false; }, 1000);
+    }
+
+    // --- Init ---
+    generateMaze();
+    loop();
+    toggleVisibility();
+    setInterval(toggleVisibility, 3000);
+  </script>
+</body>
+</html>
+<!--
+make the map larger and more complex
+Add a "glowfruit", which only becomes available after lv 5. after "eating" it, the user block glows and makes the walls around it visible
+and increase the invisible time by 0.2 seconds everytime the player hits a wall
+increase the difficulty of the maps as the lvls increase
+once the user finishes all ten lvls, stop the timer and show a pop-up that displays their best time, and a button asking them if they want to restart
+-->
