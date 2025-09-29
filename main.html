@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Blink Maze — Glowfruit Edition</title>
+<title>Blink Maze</title>
 <style>
   :root {
     --bg: black;
@@ -29,6 +29,29 @@
     margin: 8px 0 12px;
     font-weight: 600;
   }
+  @font-face {
+    font-family: "CCOverbyteOff";
+    src: url("fonts/CCOverbyteOff.ttf") format("truetype");
+    font-weight: normal;
+    font-style: normal;
+  }
+  @import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
+
+  .title {
+    font-family: "CCOverbyteOff", monospace;
+    font-size: 64px;
+    letter-spacing: 2px;
+    text-align: center;
+    image-rendering: pixelated;
+    text-shadow:
+      1px 0 #fff,
+      -1px 0 #fff,
+      0 1px #fff,
+      0 -1px #fff;
+    display: inline-block;
+    position: relative;
+  }
+
   #gameCanvas{
     display: block;
     background:var(--bg);
@@ -52,7 +75,7 @@
   }
   .card {
     width: min(760px, 94%);
-    background: rgba(12, 12, 14, 0.96);
+    background: rgba(255, 255, 255, 0.2);
     padding: 20px;
     border-radius: 12px;
     border: 1px solid rgba(255, 255, 255, 0.06);
@@ -125,472 +148,516 @@
 </head>
 <body>
   <div class="wrap">
-    <h1>✨ Blink Maze ✨</h1>
+    <h1 class="title" id="gameTitle">Blink Maze</h1>
     <canvas id="gameCanvas" width="800" height="520"></canvas>
     <div id="status">Use arrow keys / WASD. Walls blink — memorize them and reach the glow exit.</div>
   </div>
 
   <div id="introOverlay" class="overlay" style="display:flex;">
     <div class="card">
-      <h2>Blink Maze - Rules</h2>
-      <div class="rules">
-        <ul>
-          <li>Move with <strong>WASD</strong> or <strong>arrow keys</strong></li>
-          <li>Maze walls <em>blink</em>: visible for a short moment, then invisible. Meeeeeeemooooooriiiiizeeee the corrrrrrriiiiidorssss!!!!</li>
-          <li>If you <strong>collide with a wall</strong>, regardless of visibility, you WILL be sent back to the start of the level and the darkness will last longerrrr...</li>
-          <li>You goal? To reach the exit!</li>
-          <li> Once you pass lvl. 5, <strong>Glowfruit</strong> will appear! Eating them makes you glow to reveal the surrounding walls!!</li>
-          <li>Needless to say, each level gets harder...are you ready?</li>
-        </ul>
-      </div>
-      <div style="display:flex; gap: 12px; justify-content: flex-end; margin-top: 8px;">
-        <button id="startBtn" class="btn">✨ Start Game ✨</button>
+      <div id="introText"></div>
+      <div style="display:flex; gap: 12px; justify-content: flex-end; margin-top: 12px;">
         <button id="skipBtn" class="btn secondary">Just Load Game</button>
       </div>
     </div>
   </div>
 
 <script>
-//constants
-const canvas = document.getElementById('gameCanvas');
-const ctx = canvas.getContext('2d', { alpha: false });
-const statusEl = document.getElementById('status');
-const introOverlay = document.getElementById('introOverlay');
-const startBtn = document.getElementById('startBtn');
-const skipBtn = document.getElementById('skipBtn');
+  const canvas = document.getElementById('gameCanvas');
+  const ctx = canvas.getContext('2d', { alpha:false });
+  const statusEl = document.getElementById('status');
+  const introOverlay = document.getElementById('introOverlay');
+  const startBtn = document.getElementById('startBtn');
+  const skipBtn = document.getElementById('skipBtn');
+  const instructions = [
+    "Welcome to Blink Maze!",
+    "The maze walls will only flash briefly...",
+    "Move with WASD or the arrow keys!",
+    "If you hit a wall, you'll be sent back to the start.",
+    "Starting lvl 5, GLOWFRUITS will appear! Eating them will light up the walls around you~",
+    "Needless to say, each level gets harder...are you ready?"
+  ];
+  const introText = document.getElementById('introText');
+  let currentLine = 0;
+  let typing = false;
+  let startBtnCreated = false;
 
-let rows = 14, cols = 18;
-let tileSize = 36;
-let baseRows = 14, baseCols = 18;
-let level = 1, maxLevels = 10;
-let maze = [];
-let player = { x: 1, y: 1, glowing: false };
-let exit = { x: 1, y: 1 };
-let glowfruits = [];
-let visible = true;
-let startTime = Date.now();
-let bestTimes = JSON.parse(localStorage.getItem('blinkMazeBest') || '{}');
-
-let invisibleDuration = 1000;
-let visibleDuration = 1000;
-let blinkExtraGap = 400;
-let blinkHandle = null;
-let gamePaused = false;
-let glowRevealRadius = 3;
-
-//helpers
-function clamp(v, a, b) { 
-  return Math.max(a, Math.min(b, v)); 
-}
-function shuffle(arr) { 
-  for(let i=arr.length-1;i>0;i--){ 
-    const j=Math.floor(Math.random()*(i+1)); 
-    [arr[i],arr[j]]=[arr[j],arr[i]] 
-  } return arr; 
-}
-function resizeCanvas() {
-  const padW = 60;
-  const padH = 140;
-  const maxW = Math.min(window.innerWidth - padW, 1200);
-  const maxH = Math.min(window.innerHeight - padH, 900);
-  canvas.width = maxW;
-  canvas.height = maxH;
-}
-window.addEventListener('resize', ()=> {
-  resizeCanvas();
-  generateMaze();
-});
-function generateMaze(){
-  const aspect = canvas.width / canvas.height;
-  rows = Math.max(7, Math.floor(baseRows + (level * magnitudeIncreasePerLevel)));
-  cols = Math.max(7, Math.floor(baseCols + (level * magnitudeIncreasePerLevel * aspect)));
-
-  tileSize = Math.floor(Math.min(canvas.width / cols, canvas.height / rows));
-  tileSize = Math.max(tileSize, 16);
-
-  maze = Array.from({length: rows}, ()=>Array(cols).fill(1));
-
-  function carve(x,y){
-    maze[y][x] = 0;
-    const dirs = shuffle([[1,0],[-1,0],[0,1],[0,-1]]);
-    for(const [dx,dy] of dirs){
-      const nx = x + dx*2, ny = y + dy*2;
-      if(nx>0 && ny>0 && nx < cols-1 && ny < rows-1 && maze[ny][nx] === 1){
-        maze[y+dy][x+dx] = 0;
-        carve(nx, ny);
+  function typeLine(line, callback) {
+    typing = true;
+    const p = document.createElement('p');
+    p.className = 'introLine';
+     p.style.fontFamily = '"VT323", monospace';
+    introText.appendChild(p);
+    let i = 0;
+    const interval = setInterval(() => {
+      p.textContent += line[i];
+      i++;
+      if (i >= line.length) {
+        clearInterval(interval);
+        typing = false;
+        callback?.();
       }
+    }, 40);
+  }
+  function showNextIntroLine() {
+    if (typing) return;
+    if(currentLine < instructions.length) {
+      typeLine(instructions[currentLine], () => {});
+      currentLine++;
+      if(currentLine === instructions.length && !startBtnCreated) {
+        const startBtn = document.createElement('button');
+        startBtn.id = 'startBtn';
+        startBtn.className = 'btn';
+        startBtn.textContent = 'Start Game';
+        startBtn.onclick = () => { 
+          introOverlay.style.display='none';
+          init();
+        };
+        introText.parentElement.appendChild(startBtn);
+        startBtnCreated = true;
+      } 
     }
   }
-  carve(1,1);
+  introOverlay.addEventListener('click', () => {
+    showNextIntroLine();
+  });
+  skipBtn.onclick = () => {
+    introOverlay.style.display = 'none';
+    init();
+  };
+  showNextIntroLine();
 
-  exit = { x: clamp(cols - 2, 2, cols-2), y: clamp(rows - 2, 2, rows-2) };
-  maze[exit.y][exit.x] = 0;
+  const gameTitle = document.getElementById('gameTitle');
+  let frame = 0;
+  function animateTitleRetro() {
+    frame++;
+    const jitterX = Math.sin(frame * 0.2) * 2 + (Math.random() - 0.5) * 2;
+    const jitterY = Math.sin(frame * 0.1) * 3 + (Math.random() - 0.5) * 2;
+    gameTitle.style.transform = `translate(${jitterX}px, ${jitterY}px)`;
 
-  if(!isReachable(1,1, exit.x, exit.y)){
-    connectToExitRandomized();
+    requestAnimationFrame(animateTitleRetro);
   }
 
-  //add noise paths
-  addExtraOpenings(Math.min(6, Math.floor(level / 2)));
+  animateTitleRetro();
 
-  // player start & glowfruit
-  glowfruits = [];
-  if(level > 5) {
-    let count = (level >= 10) ? 3 : (level >= 8 ? 2:1);
-    let tries = 0;
-    while(count > 0 && tries < 300) {
-      tries++;
-      const gx = Math.floor(Math.random()*(cols-2)) + 1;
-      const gy = Math.floor(Math.random()*(rows-2)) + 1;
-      if (maze[gy][gx] === 0 && !(gx === 1 && gy === 1) && !(gx === exit.x && gy===exit.y) && !glowfruits.some(g => g.x===gx && g.y===gy)) {
-        glowfruits.push({x: gx, y: gy});
-        count--;
+  let rows = 14, cols = 18;
+  let tileSize = 36;
+  let baseRows = 14, baseCols = 18;
+  let level = 1, maxLevels = 10;
+  let maze = [];
+  let player = { x:1, y:1, glowing:false };
+  let exit = { x:1, y:1 };
+  let glowfruits = []; // array of {x,y}
+  let visible = true;
+  let startTime = Date.now();
+  let bestTimes = JSON.parse(localStorage.getItem('blinkMazeBest') || '{}');
+
+  let invisibleDuration = 1000; // ms: time walls are hidden
+  let visibleDuration = 1000; // ms: time walls are visible
+  let blinkExtraGap = 400; // extra gap to avoid immediate toggles
+  let blinkHandle = null;
+  let gamePaused = false;
+  let glowRevealRadius = 3; // tiles radius revealed when glowing
+
+  /* Utility helpers */
+  function clamp(v,a,b){ return Math.max(a, Math.min(b,v)); }
+  function shuffle(arr){ for(let i=arr.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [arr[i],arr[j]]=[arr[j],arr[i]] } return arr; }
+
+  /* Responsive canvas sizing: fill viewport but leave margins for UI */
+  function resizeCanvas(){
+    const padW = 60;
+    const padH = 140;
+    const maxW = Math.min(window.innerWidth - padW, 1200);
+    const maxH = Math.min(window.innerHeight - padH, 900);
+    // Keep aspect ratio near 4:3 or use available shape
+    // We'll set canvas to fill maxW x maxH but choose tileSize based on rows/cols
+    canvas.width = maxW;
+    canvas.height = maxH;
+    // adjust tile size later when generating maze so maze fills canvas
+  }
+  window.addEventListener('resize', ()=>{
+    resizeCanvas();
+    generateMaze();
+  });
+
+  function generateMaze(){
+    const aspect = canvas.width / canvas.height;
+    rows = Math.max(7, Math.floor(baseRows + level * 1.1));
+    cols = Math.max(7, Math.floor(baseCols + Math.round(level * 1.1 * aspect)));
+
+    tileSize = Math.floor(Math.min(canvas.width / cols, canvas.height / rows));
+
+    tileSize = Math.max(16, tileSize);
+    // create grid filled with walls
+    maze = Array.from({length: rows}, ()=>Array(cols).fill(1));
+
+    //2-step DFS
+    function carve(x,y){
+      maze[y][x] = 0;
+      const dirs = shuffle([[1,0],[-1,0],[0,1],[0,-1]]);
+      for(const [dx,dy] of dirs){
+        const nx = x + dx*2, ny = y + dy*2;
+        if(nx>0 && ny>0 && nx<cols-1 && ny<rows-1 && maze[ny][nx] === 1){
+          maze[y+dy][x+dx] = 0;
+          carve(nx,ny);
+        }
       }
     }
-  }
-  player = { x: 1, y: 1, glowing: false };
-  if(level > 5){
-    placeGlowfruit();
-  } else {
-    glowfruit = null;
-  }
-}
-// reachability test
-function isReachable(sx,sy, tx,ty){
-  if(sx<0 || sy<0 || tx<0 || ty<0 || sx>=cols || sy>=rows || tx>=cols || ty>=rows ) return false;
-  const vis = Array.from({length: rows}, ()=>Array(cols).fill(false));
-  const q = [{x:sx,y:sy}]; 
-  vis[sy][sx] = true;
-  for(let i=0;i<q.length;i++){
-    const c = q[i];
-    if(c.x === tx && c.y === ty) return true;
-    for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
-      const nx = c.x + dx, ny = c.y + dy;
-      if(nx>=0 && ny>=0 && nx<cols && ny<rows && !vis[ny][nx] && maze[ny][nx] === 0){
-        vis[ny][nx] = true; q.push({x:nx,y:ny});
+    carve(1,1);
+
+    // place exit bottom right
+    exit = { x: clamp(cols-2, 2, cols-2), y: clamp(rows-2, 2, rows-2) };
+    maze[exit.y][exit.x] = 0;
+
+    // If not reachable, connect via randomized corridor
+    if(!isReachable(1,1, exit.x, exit.y)){
+      connectToExitRandomized();
+    }
+
+    // add extra openings to increase complexity with level
+    addExtraOpenings(Math.min(8, Math.floor(level/2)));
+
+    // place glowfruits 
+    glowfruits = [];
+    if(level > 5){
+      let count = (level >= 10) ? 3 : (level >= 8 ? 2 : 1);
+      let tries = 0;
+      while(count > 0 && tries < 300){
+        tries++;
+        const gx = Math.floor(Math.random()*(cols-2))+1;
+        const gy = Math.floor(Math.random()*(rows-2))+1;
+        if(maze[gy][gx] === 0 && !(gx===1 && gy===1) && !(gx===exit.x && gy===exit.y) && !glowfruits.some(g=>g.x===gx&&g.y===gy)){
+          glowfruits.push({x:gx,y:gy});
+          count--;
+        }
       }
     }
+
+    // reset player position
+    player = { x:1, y:1, glowing:false };
+    startTime = Date.now();
+    restartBlinkCycle();
   }
-  return false;
-}
-function floodReachable(sx,sy){
-  const out = [];
-  const visited = Array.from({length:rows}, ()=>Array(cols).fill(false));
-  const q = [{x:sx,y:sy}]; visited[sy][sx] = true;
-  for(let i=0;i<q.length;i++){
-    const c = q[i]; out.push(c);
-    for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
-      const nx = c.x + dx, ny = c.y + dy;
-      if(nx>=0 && ny>=0 && nx<cols && ny<rows && !visited[ny][nx] && maze[ny][nx]===0){
-        visited[ny][nx] = true; q.push({x:nx,y:ny});
+
+  //BFS reachability
+  function isReachable(sx,sy,tx,ty){
+    if(sx<0||sy<0||tx<0||ty<0) return false;
+    const visited = Array.from({length:rows}, ()=>Array(cols).fill(false));
+    const q = [{x:sx,y:sy}];
+    visited[sy][sx] = true;
+    for(let i=0;i<q.length;i++){
+      const cur = q[i];
+      if(cur.x === tx && cur.y === ty) return true;
+      for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
+        const nx = cur.x + dx, ny = cur.y + dy;
+        if(nx>=0 && ny>=0 && nx<cols && ny<rows && !visited[ny][nx] && maze[ny][nx]===0){
+          visited[ny][nx] = true; q.push({x:nx,y:ny});
+        }
       }
     }
+    return false;
   }
-  return out;
-}
-
-
-function connectToExitRandomized(){
-  const reachable = floodReachable(1,1); // returns array of {x,y}
-  if(reachable.length === 0) {
-    for(let x = 1; x <= exit.x; x++)
-  }
-  let best = null, bestD = Infinity;
-  for(const r of reachable){
-    const d = Math.abs(r.x - exit.x) + Math.abs(r.y - exit.y);
-    if(d < bestD){ bestD = d; best = r; }
-  }
-  if(!best){
-    // fallback, opens a straight corridor
-    for(let x=1;x<=exit.x;x++) maze[1][x] = 0;
-    for(let y=1;y<=exit.y;y++) maze[y][exit.x] = 0;
-    return;
-  }
-
-  // carve a randomized corridor from best to exit
-  let cx = best.x, cy = best.y;
-  maze[cy][cx] = 0;
-  while(cx !== exit.x || cy !== exit.y){
-    // determine available steps
-    const dx = Math.sign(exit.x - cx);
-    const dy = Math.sign(exit.y - cy);
-    // Add randomness in step selection to avoid monotonous straight corridors
-    const choice = Math.random();
-    if(dx !== 0 && dy !== 0){
-      if(choice < 0.5){
-        cx += dx;
-      } else {
-        cy += dy;
+  function floodReachable(sx,sy){
+    const out = [];
+    const visited = Array.from({length:rows}, ()=>Array(cols).fill(false));
+    const q = [{x:sx,y:sy}]; visited[sy][sx] = true;
+    for(let i=0;i<q.length;i++){
+      const c = q[i]; out.push(c);
+      for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
+        const nx = c.x + dx, ny = c.y + dy;
+        if(nx>=0 && ny>=0 && nx<cols && ny<rows && !visited[ny][nx] && maze[ny][nx]===0){
+          visited[ny][nx] = true; q.push({x:nx,y:ny});
+        }
       }
-    } else if(dx !== 0){
-      cx += dx;
-    } else if(dy !== 0){
-      cy += dy;
-    } else break;
-    // open current and neighboring cells to maintain connectivity
+    }
+    return out;
+  }
+
+  function connectToExitRandomized(){
+    const reachable = floodReachable(1,1);
+    if(reachable.length === 0){
+      // fallback
+      for(let x=1;x<=exit.x;x++) maze[1][x]=0;
+      for(let y=1;y<=exit.y;y++) maze[y][exit.x]=0;
+      return;
+    }
+    let best = null, bestD = Infinity;
+    for(const r of reachable){
+      const d = Math.abs(r.x - exit.x) + Math.abs(r.y - exit.y);
+      if(d < bestD){ bestD = d; best = r; }
+    }
+    if(!best) return;
+    let cx = best.x, cy = best.y;
     maze[cy][cx] = 0;
-    // optionally open adjacent cell to keep corridors accessible
-    if(cx+1 < cols) maze[cy][cx+1] = Math.random() < 0.25 ? 0 : maze[cy][cx+1];
-    if(cy+1 < rows) maze[cy+1][cx] = Math.random() < 0.25 ? 0 : maze[cy+1][cx];
-  }
-}
-
-/* Return list of reachable {x,y} from start */
-function floodReachable(sx,sy){
-  const out = [];
-  const vis = Array.from({length: rows}, ()=>Array(cols).fill(false));
-  const q = [{x:sx,y:sy}]; vis[sy][sx] = true;
-  for(let i=0;i<q.length;i++){
-    const c = q[i]; out.push(c);
-    for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
-      const nx = c.x + dx, ny = c.y + dy;
-      if(nx>=0 && ny>=0 && nx<cols && ny<rows && !vis[ny][nx] && maze[ny][nx] === 0){
-        vis[ny][nx] = true; q.push({x:nx,y:ny});
-      }
+    while(cx !== exit.x || cy !== exit.y){
+      const dx = Math.sign(exit.x - cx);
+      const dy = Math.sign(exit.y - cy);
+      if(dx !== 0 && dy !== 0){
+        if(Math.random() < 0.6) cx += dx; else cy += dy;
+      } else if(dx !== 0) cx += dx;
+      else if(dy !== 0) cy += dy;
+      maze[cy][cx] = 0;
+      // occasionally open neighbor for variety
+      if(Math.random() < 0.25 && cx+1 < cols) maze[cy][cx+1] = 0;
+      if(Math.random() < 0.25 && cy+1 < rows) maze[cy+1][cx] = 0;
     }
   }
-  return out;
-}
 
-function addExtraOpenings(n){
-  for(let i=0;i<n;i++){
-    const x = Math.floor(Math.random()*(cols-2))+1;
-    const y = Math.floor(Math.random()*(rows-2))+1;
-    // Only carve if it's currently a wall and adjacent to at least one corridor
-    if(maze[y][x] === 1){
-      const adjOpen = [[1,0],[-1,0],[0,1],[0,-1]].some(([dx,dy])=>{
-        const nx = x+dx, ny = y+dy;
-        return nx>=0 && ny>=0 && nx<cols && ny<rows && maze[ny][nx] === 0;
-      });
-      if(adjOpen) maze[y][x] = 0;
-    }
-  }
-}
-
-function placeGlowfruit(){
-  let fx, fy;
-  let guard = 0;
-  do {
-    fx = Math.floor(Math.random()*(cols-2)) + 1;
-    fy = Math.floor(Math.random()*(rows-2)) + 1;
-    guard++;
-    if(guard > 500) break;
-  } while(maze[fy][fx] === 1 || (fx===1 && fy===1) || (fx===exit.x && fy===exit.y));
-  glowfruit = { x: fx, y: fy };
-}
-
-function drawMaze(){
-  for(let y=0;y<rows;y++){
-    for(let x=0;x<cols;x++){
+  //Add extra openings to create loops
+  function addExtraOpenings(n){
+    for(let i=0;i<n;i++){
+      const x = Math.floor(Math.random()*(cols-2))+1;
+      const y = Math.floor(Math.random()*(rows-2))+1;
       if(maze[y][x] === 1){
-        let drawTile = false;
-        if(visible) drawTile = true;
-        else if(player.glowing){
-          // reveal walls within radius around player
-          const dx = Math.abs(x - player.x);
-          const dy = Math.abs(y - player.y);
-          if(Math.max(dx,dy) <= glowRevealRadius) drawTile = true;
-        }
-        if(drawTile){
-          ctx.fillStyle = '#444';
-          ctx.fillRect(x*tileSize, y*tileSize, tileSize, tileSize);
+        const adj = [[1,0],[-1,0],[0,1],[0,-1]].some(([dx,dy])=>{
+          const nx = x+dx, ny = y+dy;
+          return nx>=0 && ny>=0 && nx<cols && ny<rows && maze[ny][nx]===0;
+        });
+        if(adj && Math.random() < 0.6) maze[y][x] = 0;
+      }
+    }
+  }
+
+  function drawMaze(){
+    for(let y=0;y<rows;y++){
+      for(let x=0;x<cols;x++){
+        if(maze[y][x] === 1){
+          let drawTile = false;
+          if(visible) drawTile = true;
+          else if(player.glowing){
+            const dx = Math.abs(x - player.x), dy = Math.abs(y - player.y);
+            if(Math.max(dx,dy) <= glowRevealRadius) drawTile = true;
+          }
+          if(drawTile){
+            ctx.fillStyle = '#444';
+            ctx.fillRect(x*tileSize, y*tileSize, tileSize, tileSize);
+          }
         }
       }
     }
   }
-}
-function drawPlayer(){
-  ctx.fillStyle = player.glowing ? '#7ff' : '#0ff';
-  const s = Math.max(2, tileSize - TILE_PADDING*2);
-  ctx.fillRect(player.x*tileSize + TILE_PADDING, player.y*tileSize + TILE_PADDING, s, s);
-}
-function drawExit(){
-  ctx.fillStyle = '#7f7';
-  ctx.fillRect(exit.x*tileSize + Math.max(3, tileSize*0.06), exit.y*tileSize + Math.max(3, tileSize*0.06), Math.max(4, tileSize - Math.max(6, tileSize*0.12)), Math.max(4, tileSize - Math.max(6, tileSize*0.12)));
-}
-function drawGlowfruit(){
-  if(!glowfruit) return;
-  ctx.fillStyle = '#f6a';
-  const s = Math.max(2, tileSize - TILE_PADDING*4);
-  ctx.fillRect(glowfruit.x*tileSize + TILE_PADDING*2, glowfruit.y*tileSize + TILE_PADDING*2, s, s);
-}
-function drawHUD(){
-  const elapsed = ((Date.now() - startTime)/1000).toFixed(1);
-  const best = bestTimes['L'+level] ? bestTimes['L'+level].toFixed(1)+'s' : '--';
-  ctx.fillStyle = '#fff';
-  ctx.font = '15px monospace';
-  ctx.fillText(`Level ${level}/${maxLevels}  |  Time: ${elapsed}s  |  Best: ${best}`, 10, 20);
-}
-
-function resetPlayer(msg){
-  player.x = 1; player.y = 1; player.glowing = false;
-  invisibleDuration = Math.min(4000, invisibleDuration + 200); 
-  restartBlinkCycle();
-  statusEl.textContent = msg;
-}
-function movePlayer(dx,dy){
-  if(gamePaused) return;
-  const nx = player.x + dx, ny = player.y + dy;
-  if(nx < 0 || ny < 0 || nx >= cols || ny >= rows) return;
-  if(maze[ny][nx] === 1){
-    resetPlayer(`You hit a wall! Back to start of Level ${level}.`);
-    return;
+  function drawPlayer(){
+    ctx.fillStyle = player.glowing ? '#7ff' : '#0ff';
+    const ppad = Math.max(4, Math.floor(tileSize*0.12));
+    const s = Math.max(2, tileSize - ppad*2);
+    ctx.fillRect(player.x*tileSize + ppad, player.y*tileSize + ppad, s, s);
   }
-  player.x = nx; player.y = ny;
-
-  // pick glowfruit
-  if(glowfruit && player.x === glowfruit.x && player.y === glowfruit.y){
-    player.glowing = true;
-    glowfruit = null;
+  function drawExit(){
+    ctx.fillStyle = '#7f7';
+    const pad = Math.max(3, Math.floor(tileSize * 0.06));
+    const s = Math.max(4, tileSize - pad*2);
+    ctx.fillRect(exit.x*tileSize + pad, exit.y*tileSize + pad, s, s);
   }
-
-  // reached exit
-  if(player.x === exit.x && player.y === exit.y){
-    const elapsed = (Date.now() - startTime)/1000;
-    const key = 'L'+level;
-    const prevBest = bestTimes[key];
-    if(!prevBest || elapsed < prevBest){
-      bestTimes[key] = elapsed;
-      localStorage.setItem('blinkMazeBest', JSON.stringify(bestTimes));
-      showLevelPopup(elapsed, bestTimes[key], true);
-    } else {
-      showLevelPopup(elapsed, prevBest, false);
+  function drawGlowfruits(){
+    for(const g of glowfruits){
+      ctx.fillStyle = '#f6a';
+      const pad = Math.max(4, Math.floor(tileSize * 0.14));
+      const s = Math.max(2, tileSize - pad*2);
+      ctx.fillRect(g.x*tileSize + pad, g.y*tileSize + pad, s, s);
     }
   }
-}
-
-function showLevelPopup(elapsed, bestForLevel, isNewBest){
-  gamePaused = true;
-  const backdrop = document.createElement('div');
-  backdrop.className = 'popup-backdrop';
-
-  const popup = document.createElement('div');
-  popup.className = 'popup';
-
-  const title = document.createElement('h2');
-  title.textContent = `Level ${level} complete!`;
-
-  const rowTime = document.createElement('div');
-  rowTime.className = 'row small';
-  rowTime.innerHTML = `<div>Time</div><div><strong>${elapsed.toFixed(1)}s</strong></div>`;
-
-  const rowBest = document.createElement('div');
-  rowBest.className = 'row small';
-  rowBest.innerHTML = `<div>Best</div><div><strong>${bestForLevel ? bestForLevel.toFixed(1)+'s' : '--'}</strong>${isNewBest ? ' ⭐ New Best!' : ''}</div>`;
-
-  popup.appendChild(title);
-  popup.appendChild(rowTime);
-  popup.appendChild(rowBest);
-
-  if(level === 5){
-    const explain = document.createElement('div');
-    explain.className = 'explain small';
-    explain.innerHTML = `<strong>Glowfruit unlocked!</strong> Starting at level 6, glowfruit appears on the map. Eating it makes your player <span style="color:var(--accent)">glow</span> and temporarily <em>reveal</em> surrounding walls (a ${glowRevealRadius}-tile radius) even when walls are invisible.`;
-    popup.appendChild(explain);
+  function drawHUD(){
+    const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+    const best = bestTimes['L'+level] ? bestTimes['L'+level].toFixed(1)+'s' : '--';
+    ctx.fillStyle = '#fff';
+    ctx.font = Math.max(12, Math.floor(tileSize*0.35)) + 'px monospace';
+    ctx.fillText(`Level ${level}/${maxLevels}  |  Time: ${elapsed}s  |  Best: ${best}`, 10, 20);
   }
 
-  // buttons row
-  const btnRow = document.createElement('div');
-  btnRow.style.marginTop = '14px';
-  btnRow.style.display = 'flex';
-  btnRow.style.justifyContent = 'flex-end';
-  btnRow.style.gap = '10px';
-
-  const continueBtn = document.createElement('button');
-  continueBtn.className = 'btn';
-  continueBtn.textContent = (level < maxLevels) ? 'Continue' : 'Finish';
-  continueBtn.onclick = ()=>{
-    document.body.removeChild(backdrop);
-    // advance or finish
-    if(level < maxLevels){
-      level++;
-      startTime = Date.now();
-      invisibleDuration = Math.max(800, invisibleDuration); // keep current difficulty but reset visible timing unaffected
-      generateMaze();
-      restartBlinkCycle();
-      gamePaused = false;
-      statusEl.textContent = `Level ${level} — good luck!`;
-    } else {
-      gamePaused = false;
-      // compute total best (sum of stored bests)
-      const vals = Object.values(bestTimes);
-      const total = vals.length ? vals.reduce((a,b)=>a+b,0).toFixed(1) : '0.0';
-      const again = confirm(`🏆 You finished all ${maxLevels} levels!\nTotal best time (sum of level bests): ${total}s\nRestart from level 1?`);
-      if(again){
-        level = 1; invisibleDuration = 1000; startTime = Date.now();
-        generateMaze(); restartBlinkCycle(); statusEl.textContent = 'Level 1 — go!';
+  function resetPlayer(msg){
+    player.x = 1; player.y = 1; player.glowing = false;
+    // increase invisibility but clamp
+    invisibleDuration = Math.min(4000, invisibleDuration + 200);
+    restartBlinkCycle();
+    statusEl.textContent = msg;
+  }
+  function movePlayer(dx,dy){
+    if(gamePaused) return;
+    const nx = player.x + dx, ny = player.y + dy;
+    if(nx < 0 || ny < 0 || nx >= cols || ny >= rows) return;
+    if(maze[ny][nx] === 1){
+      resetPlayer(`💀 You hit a wall! Back to start of Level ${level}.`);
+      return;
+    }
+    // Walk over glowfruits
+    player.x = nx; player.y = ny;
+    for(let i = glowfruits.length - 1; i >= 0; i--){
+      if(glowfruits[i].x === player.x && glowfruits[i].y === player.y){
+        player.glowing = true;
+        glowfruits.splice(i,1);
+      }
+    }
+    // check exit
+    if(player.x === exit.x && player.y === exit.y){
+      const elapsed = (Date.now() - startTime)/1000;
+      const key = 'L'+level;
+      const prev = bestTimes[key];
+      if(!prev || elapsed < prev){
+        bestTimes[key] = elapsed;
+        localStorage.setItem('blinkMazeBest', JSON.stringify(bestTimes));
+        showLevelPopup(elapsed, bestTimes[key], true);
       } else {
-        statusEl.textContent = 'Thanks for playing!';
+        showLevelPopup(elapsed, prev, false);
       }
     }
+  }
+
+  //popup
+  function showLevelPopup(elapsed, bestForLevel, isNewBest){
+    gamePaused = true;
+    const backdrop = document.createElement('div');
+    backdrop.className = 'popup-backdrop';
+    const pop = document.createElement('div');
+    pop.className = 'popup';
+
+    const heading = document.createElement('h3');
+    heading.textContent = `Level ${level} complete!`;
+
+    const rowTime = document.createElement('div');
+    rowTime.className = 'row small';
+    rowTime.innerHTML = `<div>Time</div><div><strong>${elapsed.toFixed(1)}s</strong></div>`;
+
+    const rowBest = document.createElement('div');
+    rowBest.className = 'row small';
+    rowBest.innerHTML = `<div>Best</div><div><strong>${bestForLevel ? bestForLevel.toFixed(1)+'s' : '--'}</strong>${isNewBest ? ' ⭐ New Best!' : ''}</div>`;
+
+    pop.appendChild(heading);
+    pop.appendChild(rowTime);
+    pop.appendChild(rowBest);
+
+    if(level >= 4){
+      const explanation = document.createElement('div');
+      explanation.className = 'explain small';
+      explanation.innerHTML = `<strong>Glowfruit:</strong> Eating a glowfruit makes your player glow and <em>reveals</em> nearby walls (a ${glowRevealRadius}-tile radius) while walls are invisible. Use it to re-learn corridors.`;
+      pop.appendChild(explanation);
+    }
+
+    const btnRow = document.createElement('div');
+    btnRow.style.marginTop = '14px';
+    btnRow.style.display = 'flex';
+    btnRow.style.justifyContent = 'flex-end';
+    btnRow.style.gap = '10px';
+
+    const keepBtn = document.createElement('button');
+    keepBtn.className = 'btn secondary';
+    keepBtn.textContent = 'Replay Level';
+    keepBtn.onclick = ()=>{
+      document.body.removeChild(backdrop);
+      // replay same level
+      player = { x:1, y:1, glowing:false };
+      startTime = Date.now();
+      gamePaused = false;
+      statusEl.textContent = `Level ${level} — replaying`;
+    };
+
+    const contBtn = document.createElement('button');
+    contBtn.className = 'btn';
+    contBtn.textContent = (level < maxLevels) ? 'Continue' : 'Finish';
+    contBtn.onclick = ()=>{
+      document.body.removeChild(backdrop);
+      if(level < maxLevels){
+        level++;
+        startTime = Date.now();
+        generateMaze();
+        gamePaused = false;
+        statusEl.textContent = `Level ${level} — good luck!`;
+      } else {
+        // finished all levels
+        const vals = Object.values(bestTimes);
+        const total = vals.length ? vals.reduce((a,b)=>a+b,0).toFixed(1) : '0.0';
+        const again = confirm(`🏆 You finished all ${maxLevels} levels!\nTotal best time (sum of level bests): ${total}s\nRestart?`);
+        if(again){
+          level = 1; invisibleDuration = 1000; startTime = Date.now();
+          generateMaze(); gamePaused = false; statusEl.textContent = 'Level 1 — go!';
+        } else {
+          statusEl.textContent = 'Thanks for playing!';
+          gamePaused = false;
+        }
+      }
+    };
+
+    btnRow.appendChild(keepBtn);
+    btnRow.appendChild(contBtn);
+    pop.appendChild(btnRow);
+
+    backdrop.appendChild(pop);
+    document.body.appendChild(backdrop);
+  }
+
+  //Blink cycle control
+  function toggleVisibilityOnce(){
+    visible = true;
+    setTimeout(()=>{ visible = false; }, visibleDuration);
+  }
+  function startBlinkCycle(){
+    if(blinkHandle) clearInterval(blinkHandle);
+    toggleVisibilityOnce();
+    blinkHandle = setInterval(()=>{ toggleVisibilityOnce(); }, visibleDuration + invisibleDuration + blinkExtraGap);
+  }
+  function restartBlinkCycle(){
+    if(blinkHandle) clearInterval(blinkHandle);
+    toggleVisibilityOnce();
+    blinkHandle = setInterval(()=>{ toggleVisibilityOnce(); }, visibleDuration + invisibleDuration + blinkExtraGap);
+  }
+
+  function draw(){
+    // clear canvas
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+
+    const mazeW = tileSize * cols;
+    const mazeH = tileSize * rows;
+    const offsetX = Math.floor((canvas.width - mazeW) / 2);
+    const offsetY = Math.floor((canvas.height - mazeH) / 2);
+
+    ctx.save();
+    ctx.translate(offsetX, offsetY);
+
+    drawMaze();
+    drawGlowfruits();
+    drawExit();
+    drawPlayer();
+    ctx.restore();
+
+    // HUD drawn in top-left
+    ctx.fillStyle = '#fff';
+    ctx.font = Math.max(12, Math.floor(tileSize*0.35)) + 'px monospace';
+    const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+    const best = bestTimes['L'+level] ? bestTimes['L'+level].toFixed(1)+'s' : '--';
+    ctx.fillText(`Level ${level}/${maxLevels}  |  Time: ${elapsed}s  |  Best: ${best}`, 10, 24);
+  }
+  function loop(){
+    if(!gamePaused) draw();
+    requestAnimationFrame(loop);
+  }
+
+  document.addEventListener('keydown', e=>{
+    if(gamePaused) return;
+    if(e.key === 'ArrowUp' || e.key === 'w') movePlayer(0,-1);
+    if(e.key === 'ArrowDown' || e.key === 's') movePlayer(0,1);
+    if(e.key === 'ArrowLeft' || e.key === 'a') movePlayer(-1,0);
+    if(e.key === 'ArrowRight' || e.key === 'd') movePlayer(1,0);
+  });
+
+  function init(){
+    resizeCanvas();
+    generateMaze();
+    startBlinkCycle();
+    loop();
+  }
+
+  startBtn.onclick = ()=>{
+    introOverlay.style.display = 'none';
+    init();
+  };
+  skipBtn.onclick = ()=>{
+    introOverlay.style.display = 'none';
+    init();
   };
 
-  const cancelBtn = document.createElement('button');
-  cancelBtn.className = 'btn secondary';
-  cancelBtn.textContent = 'Keep playing';
-  cancelBtn.onclick = ()=>{
-    document.body.removeChild(backdrop);
-    gamePaused = false;
-    statusEl.textContent = `Resumed Level ${level}`;
-  };
-
-  btnRow.appendChild(cancelBtn);
-  btnRow.appendChild(continueBtn);
-  popup.appendChild(btnRow);
-  backdrop.appendChild(popup);
-  document.body.appendChild(backdrop);
-}
-
-function toggleVisibilityOnce(){
-  visible = true;
-  setTimeout(()=>{ visible = false; }, visibleDuration);
-}
-function startBlinkCycle(){
-  if(blinkHandle) clearInterval(blinkHandle);
-  // first immediate toggle
-  toggleVisibilityOnce();
-  blinkHandle = setInterval(()=>{ toggleVisibilityOnce(); }, visibleDuration + invisibleDuration + blinkExtraGap);
-}
-function restartBlinkCycle(){
-  if(blinkHandle) clearInterval(blinkHandle);
-  toggleVisibilityOnce();
-  blinkHandle = setInterval(()=>{ toggleVisibilityOnce(); }, visibleDuration + invisibleDuration + blinkExtraGap);
-}
-
-function draw(){
-  ctx.fillStyle = '#000';
-  ctx.fillRect(0,0,canvas.width,canvas.height);
-
-  drawMaze();
-  drawExit();
-  drawGlowfruit();
-  drawPlayer();
-  drawHUD();
-}
-function loop(){
-  if(!gamePaused) draw();
-  requestAnimationFrame(loop);
-}
-
-document.addEventListener('keydown', (e)=>{
-  if(gamePaused) return;
-  if(e.key === 'ArrowUp' || e.key === 'w') movePlayer(0,-1);
-  if(e.key === 'ArrowDown' || e.key === 's') movePlayer(0,1);
-  if(e.key === 'ArrowLeft' || e.key === 'a') movePlayer(-1,0);
-  if(e.key === 'ArrowRight' || e.key === 'd') movePlayer(1,0);
-});
-
-generateMaze();
-startTime = Date.now();
-startBlinkCycle();
-loop();
-
+  resizeCanvas();
 </script>
 </body>
 </html>
-<!--
-game still doesn't fill the game canvas
-make game canvas bigger/smaller based on screen display ratio
-increase to 2 glowfruit at lvl 8 and 3 at lvl 10
-add intro page talking abt the game rules before lvl 1, with button asking if the user want to start on the bottom
--->
+<!---
+
