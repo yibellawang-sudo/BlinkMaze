@@ -1,151 +1,151 @@
 <!doctype html>
 <html lang="en">
-<head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Blink Maze</title>
-<style>
-  :root {
-    --bg: black;
-    --panel: rgba(255, 255, 255, 0.04);
-    --accent: #8ef;
-    --pink: #f6a;
-    --muted: rgba(255, 255, 255, 0.75)
-  }
-  html,body{
-    height:100%;
-    margin:0;
-    background:black;
-    color:#fff;
-    font-family:Inter,system-ui,Arial,sans-serif
-  }
-  .wrap {
-    max-width:1200px;
-    margin:18px auto;
-    text-align:center;
-    padding: 0 12px;
-  }
-  h1 {
-    margin: 8px 0 12px;
-    font-weight: 600;
-  }
-  @font-face {
-    font-family: "CCOverbyteOff";
-    src: url("fonts/CCOverbyteOff.ttf") format("truetype");
-    font-weight: normal;
-    font-style: normal;
-  }
-  @import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Blink Maze</title>
+    <style>
+      :root {
+        --bg: black;
+        --panel: rgba(255, 255, 255, 0.04);
+        --accent: #8ef;
+        --pink: #f6a;
+        --muted: rgba(255, 255, 255, 0.75)
+      }
+      html,body{
+        height:100%;
+        margin:0;
+        background:black;
+        color:#fff;
+        font-family:Inter,system-ui,Arial,sans-serif
+      }
+      .wrap {
+        max-width:1200px;
+        margin:18px auto;
+        text-align:center;
+        padding: 0 12px;
+      }
+      h1 {
+        margin: 8px 0 12px;
+        font-weight: 600;
+      }
+      @font-face {
+        font-family: "CCOverbyteOff";
+        src: url("fonts/CCOverbyteOff.ttf") format("truetype");
+        font-weight: normal;
+        font-style: normal;
+      }
+      @import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
 
-  .title {
-    font-family: "CCOverbyteOff", monospace;
-    font-size: 64px;
-    letter-spacing: 2px;
-    text-align: center;
-    image-rendering: pixelated;
-    text-shadow:
-      1px 0 #fff,
-      -1px 0 #fff,
-      0 1px #fff,
-      0 -1px #fff;
-    display: inline-block;
-    position: relative;
-  }
+      .title {
+        font-family: "CCOverbyteOff", monospace;
+        font-size: 64px;
+        letter-spacing: 2px;
+        text-align: center;
+        image-rendering: pixelated;
+        text-shadow:
+          1px 0 #fff,
+          -1px 0 #fff,
+          0 1px #fff,
+          0 -1px #fff;
+        display: inline-block;
+        position: relative;
+      }
 
-  #gameCanvas{
-    display: block;
-    background:var(--bg);
-    margin:0 auto;
-    border:3px solid #fff; 
-    image-rendering: pixelated;
-  }
-  #status{
-    margin-top: 12px;
-    font-size: 15px;
-    color: var(--muted);
-  }
-  .overlay {
-    position: fixed;
-    inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: linear-gradient(180deg, rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0.8));
-    z-index: 50;
-  }
-  .card {
-    width: min(760px, 94%);
-    background: rgba(255, 255, 255, 0.2);
-    padding: 20px;
-    border-radius: 12px;
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
-    text-align: left;
-    color: #fff;
-  }
-  .card h2 {
-    margin: 0 0 8px;
-  }
-  .rule {
-    margin: 12px 0;
-    font-size: 12px; 
-    line-height: 1.45; 
-    color: #ddd;
-  }
-  .btn {
-    background: var(--accent);
-    color: #031018;
-    border: none;
-    padding: 10px 14px;
-    border-radius: 8px;
-    cursor: pointer;
-    font-weight: 700;
-  }
-  .btn.secondary {
-    background: transparent;
-    color: #fff;
-    border: 1px solid rgba(255, 255, 255, 0.06);
-  }
-  .popup-backdrop{
-    position:fixed; 
-    inset:0; 
-    display:flex; 
-    align-items:center; 
-    justify-content:center;
-    background:linear-gradient(90deg, rgba(0, 0, 0, 0.65), rgba(0, 0, 0, 0.75));
-    z-index: 60;
-  }
-  .popup{
-    width: min(520px, 92%); 
-    background: rgba(10, 10, 12, 0.96); 
-    border:1px solid rgba(255, 255, 255, 0.06);
-    padding:20px; 
-    border-radius:12px; 
-    box-shadow: 0 10px 40px rgba(0,0,0,0.8);
-    color:#fff; 
-    text-align:left;
-  }
-  .popup h3{
-    margin: 0 0 8px; 
-  }
-  .popup .row{
-    display: flex;
-    justify-content: space-between;
-    margin:8px 0;
-  }
-  .explain {
-    background: linear-gradient(90deg, rgba(142, 230, 255, 0.03), rgba(246, 170, 255, 0.02));
-    padding: 10px;
-    border-radius: 8px;
-    margin-top: 12px;
-    color: #eaf;
-  }
-  .small {
-    font-size: 13px;
-    color: #ddd;
-  }
-</style>
-</head>
+      #gameCanvas{
+        display: block;
+        background:var(--bg);
+        margin:0 auto;
+        border:3px solid #fff; 
+        image-rendering: pixelated;
+      }
+      #status{
+        margin-top: 12px;
+        font-size: 15px;
+        color: var(--muted);
+      }
+      .overlay {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: linear-gradient(180deg, rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0.8));
+        z-index: 50;
+      }
+      .card {
+        width: min(760px, 94%);
+        background: rgba(255, 255, 255, 0.2);
+        padding: 20px;
+        border-radius: 12px;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+        text-align: left;
+        color: #fff;
+      }
+      .card h2 {
+        margin: 0 0 8px;
+      }
+      .rule {
+        margin: 12px 0;
+        font-size: 12px; 
+        line-height: 1.45; 
+        color: #ddd;
+      }
+      .btn {
+        background: var(--accent);
+        color: #031018;
+        border: none;
+        padding: 10px 14px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-weight: 700;
+      }
+      .btn.secondary {
+        background: transparent;
+        color: #fff;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+      }
+      .popup-backdrop{
+        position:fixed; 
+        inset:0; 
+        display:flex; 
+        align-items:center; 
+        justify-content:center;
+        background:linear-gradient(90deg, rgba(0, 0, 0, 0.65), rgba(0, 0, 0, 0.75));
+        z-index: 60;
+      }
+      .popup{
+        width: min(520px, 92%); 
+        background: rgba(10, 10, 12, 0.96); 
+        border:1px solid rgba(255, 255, 255, 0.06);
+        padding:20px; 
+        border-radius:12px; 
+        box-shadow: 0 10px 40px rgba(0,0,0,0.8);
+        color:#fff; 
+        text-align:left;
+      }
+      .popup h3{
+        margin: 0 0 8px; 
+      }
+      .popup .row{
+        display: flex;
+        justify-content: space-between;
+        margin:8px 0;
+      }
+      .explain {
+        background: linear-gradient(90deg, rgba(142, 230, 255, 0.03), rgba(246, 170, 255, 0.02));
+        padding: 10px;
+        border-radius: 8px;
+        margin-top: 12px;
+        color: #eaf;
+      }
+      .small {
+        font-size: 13px;
+        color: #ddd;
+      }
+    </style>
+  </head>
 <body>
   <div class="wrap">
     <h1 class="title" id="gameTitle">Blink Maze</h1>
@@ -247,30 +247,26 @@
   let maze = [];
   let player = { x:1, y:1, glowing:false };
   let exit = { x:1, y:1 };
-  let glowfruits = []; // array of {x,y}
+  let glowfruits = [];
   let visible = true;
   let startTime = Date.now();
   let bestTimes = JSON.parse(localStorage.getItem('blinkMazeBest') || '{}');
 
-  let invisibleDuration = 1000; // ms: time walls are hidden
-  let visibleDuration = 1000; // ms: time walls are visible
-  let blinkExtraGap = 400; // extra gap to avoid immediate toggles
+  let invisibleDuration = 1000; 
+  let visibleDuration = 1000; 
+  let blinkExtraGap = 400; 
   let blinkHandle = null;
   let gamePaused = false;
-  let glowRevealRadius = 3; // tiles radius revealed when glowing
+  let glowRevealRadius = 3; 
 
-  /* Utility helpers */
   function clamp(v,a,b){ return Math.max(a, Math.min(b,v)); }
   function shuffle(arr){ for(let i=arr.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [arr[i],arr[j]]=[arr[j],arr[i]] } return arr; }
 
-  /* Responsive canvas sizing: fill viewport but leave margins for UI */
   function resizeCanvas(){
     const padW = 60;
     const padH = 140;
     const maxW = Math.min(window.innerWidth - padW, 1200);
     const maxH = Math.min(window.innerHeight - padH, 900);
-    // Keep aspect ratio near 4:3 or use available shape
-    // We'll set canvas to fill maxW x maxH but choose tileSize based on rows/cols
     canvas.width = maxW;
     canvas.height = maxH;
     // adjust tile size later when generating maze so maze fills canvas
